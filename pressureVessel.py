@@ -8,6 +8,9 @@ ABAQUS Manual.
 
 from abaqus import *
 from abaqusConstants import *
+import inspect
+backwardCompatibility.setValues(includeDeprecated=True,
+                                reportDeprecated=False)
 
 # Create a model.
 
@@ -25,13 +28,21 @@ import part
 
 # Create a sketch for the base feature.
 
-pvRotateSketch = pvModel.Sketch(name='pvRotateSketch',
-    sheetSize=250.)
+pvRotateSketch = pvModel.ConstrainedSketch(name='pvRotateSketch',
+    sheetSize=100.)
 
+
+pvRotateSketch.Line(point1=(0, 40), point2=(20, 40))
 pvRotateSketch.Line(point1=(20, 40), point2=(20, -40))
-pvRotateSketch.Line(point1=(20, 40), point2=(0, 40))
-pvRotateSketch.ArcByCenterEnds(center=(0, -40), point1=(20, -40), point2=(0,-60))
-pvRotateSketch.assignCenterline(pvRotateSketch.Line(point1=(0, 40), point2=(0, -40)))
+pvRotateSketch.ArcByCenterEnds(center=(0, -40), point1=(0,-60), point2=(20, -40))
+pvRotateSketch.Line(point1=(0, -60), point2=(0, -55))
+pvRotateSketch.ArcByCenterEnds(center=(0, -40), point1=(0,-55), point2=(15,-40))
+pvRotateSketch.Line(point1=(15, -40), point2=(15, 35))
+pvRotateSketch.Line(point1=(15, 35), point2=(0, 35))
+pvRotateSketch.Line(point1=(0, 35), point2=(0, 40))
+pvRotateSketch.assignCenterline(pvRotateSketch.ConstructionLine(point1=(0,0), point2=(0,1)))
+
+sketch = mdb.models["PressureVessel"].convertAllSketches()
 
 # Create a three-dimensional, deformable part.
 
@@ -41,7 +52,7 @@ pvPart = pvModel.Part(name='PressureVessel', dimensionality=THREE_D,
 # Create the part's base feature by extruding the sketch 
 # through a distance of 25.0.
 
-pvPart.BaseSolidRevolve(sketch=pvSketch, angle=360)
+pvPart.BaseSolidRevolve(sketch=pvRotateSketch, angle=360)
 
 
 #-----------------------------------------------------
@@ -50,7 +61,7 @@ import material
 
 # Create a material.
 
-mySteel = myModel.Material(name='Steel')
+mySteel = pvModel.Material(name='Steel')
 
 # Create the elastic properties: youngsModulus is 209.E3
 # and poissonsRatio is 0.3
@@ -64,7 +75,7 @@ import section
 
 # Create the solid section.
 
-mySection = myModel.HomogeneousSolidSection(name='pvSection',
+mySection = pvModel.HomogeneousSolidSection(name='pvSection',
     material='Steel', thickness=1.0)
 
 # Assign the section to the region. The region refers 
@@ -81,7 +92,7 @@ import assembly
 
 # Create a part instance.
 
-myAssembly = myModel.rootAssembly
+myAssembly = pvModel.rootAssembly
 myInstance = myAssembly.Instance(name='pvInstance',
     part=pvPart, dependent=OFF)
 
@@ -93,7 +104,7 @@ import step
 # and the initial incrementation is 0.1; the step is created
 # after the initial step. 
 
-myModel.StaticStep(name='pressureStep', previous='Initial',
+pvModel.StaticStep(name='pressureStep', previous='Initial',
     timePeriod=1.0, initialInc=0.1,
     description='Pressurize it.')
 
@@ -103,8 +114,15 @@ import load
 
 # Create a pressure load on the top face of the beam.
 
-topSurface = [(face, SIDE2) for face in myInstance.faces]
-myModel.Pressure(name='Pressure', createStepName='pressureStep',
+#insideFaces = [myInstance.faces.findAt((0,0,-55),),myInstance.faces.findAt((0,15,0),),myInstance.faces.findAt((0,0,35),)]
+
+#insideSurface = [(face, SIDE1) for face in insideFaces]
+
+topFaceCenter = (15,0,0)
+topFace = myInstance.faces.findAt((topFaceCenter,) )
+topSurface = ((topFace, SIDE1), )
+
+pvModel.Pressure(name='Pressure', createStepName='pressureStep',
     region=topSurface, magnitude=0.5)
 
 #-------------------------------------------------------
@@ -113,8 +131,10 @@ import mesh
 
 # Assign an element type to the part instance.
 
-region = (myInstance.cells,)
-elemType = mesh.ElemType(elemCode=C3D8I, elemLibrary=STANDARD)
+region = [cell for cell in myInstance.cells]
+elemType = mesh.ElemType(elemCode=C3D10, elemLibrary=STANDARD)
+
+myAssembly.setMeshControls(regions=region, elemShape=TET)
 myAssembly.setElementType(regions=region, elemTypes=(elemType,))
 
 # Seed the part instance.
@@ -137,7 +157,7 @@ myViewport.setValues(displayedObject=myAssembly)
 for e in myAssembly.instances['pvInstance'].elements:
 
     # Create material based on element's location
-    steelTemp = myModel.Material(name='Steel'+str(e.label))
+    steelTemp = pvModel.Material(name='Steel'+str(e.label))
 
     # Create the elastic properties: youngsModulus is 209.E3
     # and poissonsRatio is 0.3
@@ -148,7 +168,7 @@ for e in myAssembly.instances['pvInstance'].elements:
 
     # Create section with region equal to the element region
     
-    mySection = myModel.HomogeneousSolidSection(name='pvSection'+str(e.label),
+    mySection = pvModel.HomogeneousSolidSection(name='pvSection'+str(e.label),
         material='Steel'+str(e.label), thickness=1.0)
 
     region = regionToolset.Region(elements=e)
@@ -181,3 +201,9 @@ import visualization
 myOdb = visualization.openOdb(path=jobName + '.odb')
 myViewport.setValues(displayedObject=myOdb)
 myViewport.odbDisplay.setPlotMode(CONTOUR)
+
+
+def printMethods(object):
+    # Abaqus has terrible documentation so this function is useful for debugging
+    object_methods = [method_name for method_name in dir(object)]
+    print("object_methods: " + str(object_methods))
