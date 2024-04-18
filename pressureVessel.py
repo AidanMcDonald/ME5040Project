@@ -15,10 +15,33 @@ backwardCompatibility.setValues(includeDeprecated=True,
 def printMethods(object):
     # Abaqus has terrible documentation so this function is useful for debugging
     object_methods = [method_name for method_name in dir(object)]
-    print("object_methods: " + str(object_methods))
+    #print("object_methods: " + str(object_methods))
 
-def getElasticProperties(element):
-    elasticProperties = (209.E3, 0.3)
+def getElasticProperties(element, part):
+    # Set material properties for an element
+    
+    #print("element: " + str(element))
+    
+    # Get location of element from nodes
+    elementNodeLabels = element.connectivity
+    
+    nodes = part.nodes
+    
+    coords = []
+    for n in elementNodeLabels:
+        coords.append(nodes.getFromLabel(n+1).coordinates)
+    
+    centroid = [0.0, 0.0, 0.0]
+    for i in range(3):
+        centroid[i] = sum([c[i] for c in coords])/len(elementNodeLabels)
+        
+    # Set E based on vertical coordinate
+    scalingFactor = 3E3
+    youngsModulus = 209E3/100*(centroid[1]+60)
+    
+    poissonsRatio = 0.3
+    
+    elasticProperties = (youngsModulus, poissonsRatio)
     return elasticProperties
 
 # Create a model.
@@ -70,13 +93,13 @@ import material
 
 # Create a material.
 
-mySteel = pvModel.Material(name='Steel')
+#mySteel = pvModel.Material(name='Steel')
 
 # Create the elastic properties: youngsModulus is 209.E3
 # and poissonsRatio is 0.3
 
-elasticProperties = (209.E3, 0.3)
-mySteel.Elastic(table=(elasticProperties, ) )
+#elasticProperties = (209.E3, 0.3)
+#mySteel.Elastic(table=(elasticProperties, ) )
 
 #-------------------------------------------------------
 
@@ -84,15 +107,15 @@ import section
 
 # Create the solid section.
 
-mySection = pvModel.HomogeneousSolidSection(name='pvSection',
-    material='Steel', thickness=1.0)
+#mySection = pvModel.HomogeneousSolidSection(name='pvSection',
+#    material='Steel', thickness=1.0)
 
 # Assign the section to the region. The region refers 
 # to the single cell in this model.
 
-region = (pvPart.cells,)
-pvPart.SectionAssignment(region=region,
-    sectionName='pvSection')
+#region = (pvPart.cells,)
+#pvPart.SectionAssignment(region=region,
+#    sectionName='pvSection')
 
 #-------------------------------------------------------
 
@@ -103,7 +126,7 @@ import assembly
 
 myAssembly = pvModel.rootAssembly
 myInstance = myAssembly.Instance(name='pvInstance',
-    part=pvPart, dependent=OFF)
+    part=pvPart, dependent=ON)
 
 #-------------------------------------------------------
 
@@ -142,31 +165,38 @@ import mesh
 
 # Assign an element type to the part instance.
 
-region = [cell for cell in myInstance.cells]
+region = [cell for cell in pvPart.cells]
 elemType = mesh.ElemType(elemCode=C3D10, elemLibrary=STANDARD)
 
-myAssembly.setMeshControls(regions=region, elemShape=TET)
-myAssembly.setElementType(regions=region, elemTypes=(elemType,))
+pvPart.setMeshControls(regions=region, elemShape=TET)
+pvPart.setElementType(regions=region, elemTypes=(elemType,))
 
 # Seed the part instance.
 
-myAssembly.seedPartInstance(regions=(myInstance,), size=10.0)
+pvPart.seedPart(size=10.0)
 
 # Mesh the part instance.
 
-myAssembly.generateMesh(regions=(myInstance,))
+pvPart.generateMesh()
 
 # Display the meshed beam.
 
 myViewport.assemblyDisplay.setValues(mesh=ON)
 myViewport.assemblyDisplay.meshOptions.setValues(meshTechnique=ON)
-myViewport.setValues(displayedObject=myAssembly)
+myViewport.setValues(displayedObject=pvPart)
 
 #-------------------------------------------------------
 
 # Set unique material properties for each cell
 
-els = myAssembly.instances['pvInstance'].elements
+
+#nodes = myAssembly.instances['pvInstance'].nodes
+#for n in nodes:
+#    print("n.label: " + str(n.label))
+
+
+
+els = pvPart.elements
 for e in els:
 
     # Create material based on element's location
@@ -175,7 +205,7 @@ for e in els:
     # Create the elastic properties: youngsModulus is 209.E3
     # and poissonsRatio is 0.3
 
-    elasticProperties = getElasticProperties(e)
+    elasticProperties = getElasticProperties(e, pvPart)
     steelTemp.Elastic(table=(elasticProperties, ) )
 
 
