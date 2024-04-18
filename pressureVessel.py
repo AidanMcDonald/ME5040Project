@@ -1,16 +1,25 @@
 """
-beamExample.py
+pressureVessel.py
 
-Reproduce the cantilever beam example from the
-Appendix of the Getting Started with
-ABAQUS Manual.
+Model a simple reactor pressure vessel with continuously
+changing material properties.
 """
 
 from abaqus import *
 from abaqusConstants import *
+import regionToolset
 import inspect
 backwardCompatibility.setValues(includeDeprecated=True,
                                 reportDeprecated=False)
+
+def printMethods(object):
+    # Abaqus has terrible documentation so this function is useful for debugging
+    object_methods = [method_name for method_name in dir(object)]
+    print("object_methods: " + str(object_methods))
+
+def getElasticProperties(element):
+    elasticProperties = (209.E3, 0.3)
+    return elasticProperties
 
 # Create a model.
 
@@ -113,17 +122,19 @@ pvModel.StaticStep(name='pressureStep', previous='Initial',
 import load
 
 # Create a pressure load on the top face of the beam.
+insideFacePoint = (15,0,0)
+insideFace = myInstance.faces.findAt((insideFacePoint,) )
 
-#insideFaces = [myInstance.faces.findAt((0,0,-55),),myInstance.faces.findAt((0,15,0),),myInstance.faces.findAt((0,0,35),)]
+insideTopFacePoint = (0,35,0)
+insideTopFace = myInstance.faces.findAt((insideTopFacePoint,) )
 
-#insideSurface = [(face, SIDE1) for face in insideFaces]
+insideBottomFacePoint = (0,-55,0)
+insideBottomFace = myInstance.faces.findAt((insideBottomFacePoint,) )
 
-topFaceCenter = (15,0,0)
-topFace = myInstance.faces.findAt((topFaceCenter,) )
-topSurface = ((topFace, SIDE1), )
+insideSurfaces = ((insideFace, SIDE1), (insideTopFace, SIDE1), (insideBottomFace, SIDE1))
 
 pvModel.Pressure(name='Pressure', createStepName='pressureStep',
-    region=topSurface, magnitude=0.5)
+    region=insideSurfaces, magnitude=0.5)
 
 #-------------------------------------------------------
 
@@ -152,9 +163,11 @@ myViewport.assemblyDisplay.meshOptions.setValues(meshTechnique=ON)
 myViewport.setValues(displayedObject=myAssembly)
 
 #-------------------------------------------------------
-'''
+
 # Set unique material properties for each cell
-for e in myAssembly.instances['pvInstance'].elements:
+
+els = myAssembly.instances['pvInstance'].elements
+for e in els:
 
     # Create material based on element's location
     steelTemp = pvModel.Material(name='Steel'+str(e.label))
@@ -162,7 +175,7 @@ for e in myAssembly.instances['pvInstance'].elements:
     # Create the elastic properties: youngsModulus is 209.E3
     # and poissonsRatio is 0.3
 
-    elasticProperties = (209.E3, 0.3)
+    elasticProperties = getElasticProperties(e)
     steelTemp.Elastic(table=(elasticProperties, ) )
 
 
@@ -171,10 +184,9 @@ for e in myAssembly.instances['pvInstance'].elements:
     mySection = pvModel.HomogeneousSolidSection(name='pvSection'+str(e.label),
         material='Steel'+str(e.label), thickness=1.0)
 
-    region = regionToolset.Region(elements=e)
+    region = regionToolset.Region(elements=els.sequenceFromLabels([e.label]))
     pvPart.SectionAssignment(region=region,
         sectionName='pvSection'+str(e.label))
-'''
 
 #-------------------------------------------------------
 
@@ -200,10 +212,4 @@ import visualization
 
 myOdb = visualization.openOdb(path=jobName + '.odb')
 myViewport.setValues(displayedObject=myOdb)
-myViewport.odbDisplay.setPlotMode(CONTOUR)
 
-
-def printMethods(object):
-    # Abaqus has terrible documentation so this function is useful for debugging
-    object_methods = [method_name for method_name in dir(object)]
-    print("object_methods: " + str(object_methods))
