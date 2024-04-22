@@ -1,16 +1,48 @@
 """
-beamExample.py
+pressureVessel.py
 
-Reproduce the cantilever beam example from the
-Appendix of the Getting Started with
-ABAQUS Manual.
+Model a simple reactor pressure vessel with continuously
+changing material properties.
 """
 
 from abaqus import *
 from abaqusConstants import *
+import regionToolset
 import inspect
 backwardCompatibility.setValues(includeDeprecated=True,
                                 reportDeprecated=False)
+
+def printMethods(object):
+    # Abaqus has terrible documentation so this function is useful for debugging
+    object_methods = [method_name for method_name in dir(object)]
+    #print("object_methods: " + str(object_methods))
+
+def getElasticProperties(element, part):
+    # Set material properties for an element
+    
+    #print("element: " + str(element))
+    
+    # Get location of element from nodes
+    elementNodeLabels = element.connectivity
+    
+    nodes = part.nodes
+    
+    coords = []
+    for n in elementNodeLabels:
+        coords.append(nodes.getFromLabel(n+1).coordinates)
+    
+    centroid = [0.0, 0.0, 0.0]
+    for i in range(3):
+        centroid[i] = sum([c[i] for c in coords])/len(elementNodeLabels)
+        
+    # Set E based on vertical coordinate
+    scalingFactor = 3E3
+    youngsModulus = 209E3/100*(centroid[1]+60)
+    
+    poissonsRatio = 0.3
+    
+    elasticProperties = (youngsModulus, poissonsRatio)
+    return elasticProperties
 
 # Create a model.
 
@@ -61,13 +93,13 @@ import material
 
 # Create a material.
 
-mySteel = pvModel.Material(name='Steel')
+#mySteel = pvModel.Material(name='Steel')
 
 # Create the elastic properties: youngsModulus is 209.E3
 # and poissonsRatio is 0.3
 
-elasticProperties = (209.E3, 0.3)
-mySteel.Elastic(table=(elasticProperties, ) )
+#elasticProperties = (209.E3, 0.3)
+#mySteel.Elastic(table=(elasticProperties, ) )
 
 #-------------------------------------------------------
 
@@ -75,15 +107,15 @@ import section
 
 # Create the solid section.
 
-mySection = pvModel.HomogeneousSolidSection(name='pvSection',
-    material='Steel', thickness=1.0)
+#mySection = pvModel.HomogeneousSolidSection(name='pvSection',
+#    material='Steel', thickness=1.0)
 
 # Assign the section to the region. The region refers 
 # to the single cell in this model.
 
-region = (pvPart.cells,)
-pvPart.SectionAssignment(region=region,
-    sectionName='pvSection')
+#region = (pvPart.cells,)
+#pvPart.SectionAssignment(region=region,
+#    sectionName='pvSection')
 
 #-------------------------------------------------------
 
@@ -94,7 +126,7 @@ import assembly
 
 myAssembly = pvModel.rootAssembly
 myInstance = myAssembly.Instance(name='pvInstance',
-    part=pvPart, dependent=OFF)
+    part=pvPart, dependent=ON)
 
 #-------------------------------------------------------
 
@@ -113,17 +145,19 @@ pvModel.StaticStep(name='pressureStep', previous='Initial',
 import load
 
 # Create a pressure load on the top face of the beam.
+insideFacePoint = (15,0,0)
+insideFace = myInstance.faces.findAt((insideFacePoint,) )
 
-#insideFaces = [myInstance.faces.findAt((0,0,-55),),myInstance.faces.findAt((0,15,0),),myInstance.faces.findAt((0,0,35),)]
+insideTopFacePoint = (0,35,0)
+insideTopFace = myInstance.faces.findAt((insideTopFacePoint,) )
 
-#insideSurface = [(face, SIDE1) for face in insideFaces]
+insideBottomFacePoint = (0,-55,0)
+insideBottomFace = myInstance.faces.findAt((insideBottomFacePoint,) )
 
-topFaceCenter = (15,0,0)
-topFace = myInstance.faces.findAt((topFaceCenter,) )
-topSurface = ((topFace, SIDE1), )
+insideSurfaces = ((insideFace, SIDE1), (insideTopFace, SIDE1), (insideBottomFace, SIDE1))
 
 pvModel.Pressure(name='Pressure', createStepName='pressureStep',
-    region=topSurface, magnitude=0.5)
+    region=insideSurfaces, magnitude=0.5)
 
 #-------------------------------------------------------
 
@@ -131,30 +165,39 @@ import mesh
 
 # Assign an element type to the part instance.
 
-region = [cell for cell in myInstance.cells]
+region = [cell for cell in pvPart.cells]
 elemType = mesh.ElemType(elemCode=C3D10, elemLibrary=STANDARD)
 
-myAssembly.setMeshControls(regions=region, elemShape=TET)
-myAssembly.setElementType(regions=region, elemTypes=(elemType,))
+pvPart.setMeshControls(regions=region, elemShape=TET)
+pvPart.setElementType(regions=region, elemTypes=(elemType,))
 
 # Seed the part instance.
 
-myAssembly.seedPartInstance(regions=(myInstance,), size=10.0)
+pvPart.seedPart(size=10.0)
 
 # Mesh the part instance.
 
-myAssembly.generateMesh(regions=(myInstance,))
+pvPart.generateMesh()
 
 # Display the meshed beam.
 
 myViewport.assemblyDisplay.setValues(mesh=ON)
 myViewport.assemblyDisplay.meshOptions.setValues(meshTechnique=ON)
-myViewport.setValues(displayedObject=myAssembly)
+myViewport.setValues(displayedObject=pvPart)
 
 #-------------------------------------------------------
-'''
+
 # Set unique material properties for each cell
-for e in myAssembly.instances['pvInstance'].elements:
+
+
+#nodes = myAssembly.instances['pvInstance'].nodes
+#for n in nodes:
+#    print("n.label: " + str(n.label))
+
+
+
+els = pvPart.elements
+for e in els:
 
     # Create material based on element's location
     steelTemp = pvModel.Material(name='Steel'+str(e.label))
@@ -162,7 +205,7 @@ for e in myAssembly.instances['pvInstance'].elements:
     # Create the elastic properties: youngsModulus is 209.E3
     # and poissonsRatio is 0.3
 
-    elasticProperties = (209.E3, 0.3)
+    elasticProperties = getElasticProperties(e, pvPart)
     steelTemp.Elastic(table=(elasticProperties, ) )
 
 
@@ -171,10 +214,9 @@ for e in myAssembly.instances['pvInstance'].elements:
     mySection = pvModel.HomogeneousSolidSection(name='pvSection'+str(e.label),
         material='Steel'+str(e.label), thickness=1.0)
 
-    region = regionToolset.Region(elements=e)
+    region = regionToolset.Region(elements=els.sequenceFromLabels([e.label]))
     pvPart.SectionAssignment(region=region,
         sectionName='pvSection'+str(e.label))
-'''
 
 #-------------------------------------------------------
 
@@ -200,10 +242,4 @@ import visualization
 
 myOdb = visualization.openOdb(path=jobName + '.odb')
 myViewport.setValues(displayedObject=myOdb)
-myViewport.odbDisplay.setPlotMode(CONTOUR)
 
-
-def printMethods(object):
-    # Abaqus has terrible documentation so this function is useful for debugging
-    object_methods = [method_name for method_name in dir(object)]
-    print("object_methods: " + str(object_methods))
