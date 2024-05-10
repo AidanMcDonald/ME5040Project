@@ -252,10 +252,8 @@ if __name__ == '__main__':
     designTemperature = 343.3  # [C]
     height = 12.056  # [m]
     
-    #ExecutePressureVesselCase(modelName="ControlCase", t=0, pressure=1.5e7, sourceLocation = [0.0, (-height/2+innerRadius)/2, 0.0], meshSize=1.0)
-    #ExecutePressureVesselCase(modelName="NominalCase", t=60, pressure=1.5e7, sourceLocation = [0.0, (-height/2+innerRadius)/2, 0.0], meshSize=1.0)
-    #ExecutePressureVesselCase(modelName="ReallyCookIt", t=6e4, pressure=1.5e7*5, sourceLocation = [0.0, (-height/2+innerRadius)/2, 0.0], meshSize=1.0)
-    #ExecutePressureVesselCase(modelName="OutsideSource", t=6e4, pressure=1.5e9, sourceLocation = [innerRadius+thickness+.2, (-height/2+innerRadius)/2, 0.0], meshSize=1.0)
-
-    ExecutePressureVesselCase(modelName="DontPopIt", t=0, pressure=1.5e7*5.5, sourceLocation = [0.0, (-height/2+innerRadius)/2, 0.0], meshSize=1.0)
-    ExecutePressureVesselCase(modelName="PopIt", t=6e4, pressure=1.5e7*5.5, sourceLocation = [innerRadius+thickness+.2, (-height/2+innerRadius), 0.0], meshSize=1.0)
+    ExecutePressureVesselCase(modelName="ControlCase", t=0, pressure=designPressure, sourceLocation = [0.0, (-height/2+innerRadius)/2, 0.0], meshSize=1.0)
+    ExecutePressureVesselCase(modelName="NominalCase", t=60, pressure=designPressure, sourceLocation = [0.0, (-height/2+innerRadius)/2, 0.0], meshSize=1.0)
+    #ExecutePressureVesselCase(modelName="ReallyCookIt", t=6e4, pressure=designPressure, sourceLocation = [0.0, (-height/2+innerRadius)/2, 0.0], meshSize=1.0)
+    ExecutePressureVesselCase(modelName="PopIt", t=0, pressure=designPressure*4.8, sourceLocation = [0.0, (-height/2+innerRadius)/2, 0.0], meshSize=1.0)
+    ExecutePressureVesselCase(modelName="AlmostPopIt", t=6e4, pressure=designPressure*4.8, sourceLocation = [innerRadius+thickness+.2, (-height/2+innerRadius), 0.0], meshSize=1.0)
